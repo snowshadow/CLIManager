@@ -2,6 +2,8 @@
 
 CLIManager is a lightweight macOS app to organize and run commands across many local projects from one place. It is designed for people who constantly hop between directories and want a single, simple control panel to start/stop tasks and view logs.
 
+![主界面截图](assets/截图.png)
+
 ## Features
 
 - Track multiple projects with name, path, and start command

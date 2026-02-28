@@ -2,6 +2,7 @@
 .build/
 Packages/
 DerivedData/
+dist/
 *.xcodeproj
 *.xcworkspace
 *.xcuserstate
