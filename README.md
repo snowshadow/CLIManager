@@ -20,6 +20,29 @@ CLIManager is a lightweight macOS app to organize and run commands across many l
 2. Select a project to view details and logs.
 3. Use **Start** / **Stop** to control the process.
 
+## CLI Import API
+
+CLIManager also exposes a CLI entrypoint for automation:
+
+```bash
+swift run CLIManagerCLI import --path /absolute/path/to/project
+```
+
+Optional flags:
+
+- `--name "Custom Name"`
+- `--command "npm run dev"`
+- `--root /custom/CLIManager-data-root`
+- `--dry-run`
+
+The command prints a JSON result with:
+
+- `action`: `created`, `unchanged`, or `preview`
+- `project`: the registered project record
+- `projectsFile`: the `projects.json` path used
+
+Inside the app, use the `Automation` toolbar button to view the import command, copy it, and reveal the CLIManager data location in Finder.
+
 ## Build & Run
 
 Requirements:

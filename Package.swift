@@ -8,7 +8,8 @@ let package = Package(
     ],
     products: [
         .library(name: "CLIManagerCore", targets: ["CLIManagerCore"]),
-        .executable(name: "CLIManagerApp", targets: ["CLIManagerApp"])
+        .executable(name: "CLIManagerApp", targets: ["CLIManagerApp"]),
+        .executable(name: "CLIManagerCLI", targets: ["CLIManagerCLI"])
     ],
     targets: [
         .target(
@@ -16,6 +17,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "CLIManagerApp",
+            dependencies: ["CLIManagerCore"]
+        ),
+        .executableTarget(
+            name: "CLIManagerCLI",
             dependencies: ["CLIManagerCore"]
         ),
         .testTarget(

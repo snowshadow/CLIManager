@@ -1,9 +1,11 @@
 import CLIManagerCore
+import AppKit
 import SwiftUI
 
 struct ContentView: View {
     @ObservedObject private var model: AppViewModel
     @State private var activeSheet: EditorSheet?
+    @State private var showingAutomationGuide = false
 
     private struct EditorSheet: Identifiable {
         let id = UUID()
@@ -53,17 +55,30 @@ struct ContentView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                 }
+                ToolbarItem {
+                    Button {
+                        showingAutomationGuide = true
+                    } label: {
+                        Label("Automation", systemImage: "terminal")
+                    }
+                }
             }
         } detail: {
             if let project = model.projects.first(where: { $0.id == model.selectedProjectID }) {
                 projectDetail(project)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
                     Image(systemName: "hammer")
                         .font(.system(size: 36))
                         .foregroundStyle(.secondary)
                     Text("No Project Selected")
                         .font(.headline)
+                    Text("Import projects from your terminal with CLIManagerCLI.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button("Open Automation Guide") {
+                        showingAutomationGuide = true
+                    }
                 }
             }
         }
@@ -83,6 +98,9 @@ struct ContentView: View {
                     activeSheet = nil
                 }
             })
+        }
+        .sheet(isPresented: $showingAutomationGuide) {
+            AutomationGuideView()
         }
         .task {
             await model.bootstrap()
@@ -148,5 +166,114 @@ struct ContentView: View {
             }
         }
         .padding(16)
+    }
+}
+
+private struct AutomationGuideView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let appPaths = AppPaths()
+
+    private var importCommand: String {
+        "CLIManagerCLI import --path /absolute/path/to/project"
+    }
+
+    private var packageCommand: String {
+        "swift run --package-path /path/to/CLIManager CLIManagerCLI import --path /absolute/path/to/project"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Automation")
+                        .font(.title2.bold())
+                    Text("Register CLI projects without using the Add Project form.")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+
+            GroupBox("Official Import API") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("If CLIManagerCLI is already installed or built:")
+                        .font(.subheadline.weight(.medium))
+                    commandRow(importCommand)
+
+                    Text("If you are calling from the source checkout:")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.top, 4)
+                    commandRow(packageCommand)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("Data Location") {
+                VStack(alignment: .leading, spacing: 10) {
+                    pathRow(title: "CLIManager Data Root", path: appPaths.root.path)
+                    pathRow(title: "Projects File", path: appPaths.projectsFile.path)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text("Imported projects appear after a refresh if the app is already open.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+        }
+        .padding(20)
+        .frame(width: 720, height: 420)
+    }
+
+    @ViewBuilder
+    private func commandRow(_ command: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(command)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Button("Copy Command") {
+                    copyToPasteboard(command)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pathRow(title: String, path: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+            Text(path)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Button("Copy Path") {
+                    copyToPasteboard(path)
+                }
+                Button("Reveal in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(string, forType: .string)
     }
 }

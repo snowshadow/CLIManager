@@ -1,0 +1,7 @@
+interface:
+  display_name: "CLIManager Register Project"
+  short_description: "Register a local CLI app in CLIManager"
+  default_prompt: "Use $climanager-register-project to add this local CLI app into CLIManager."
+
+policy:
+  allow_implicit_invocation: true
