@@ -3,6 +3,8 @@
 Packages/
 DerivedData/
 dist/
+.agents/
+skills-lock.json
 *.xcodeproj
 *.xcworkspace
 *.xcuserstate

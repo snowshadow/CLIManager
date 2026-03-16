@@ -12,17 +12,22 @@ final class AppViewModel: ObservableObject {
 
     private let projectService: ProjectService
     private let runtimeService: RuntimeService
+    private let projectsFileURL: URL
     private var logTask: Task<Void, Never>?
+    private var projectFileWatchTask: Task<Void, Never>?
+    private var lastProjectsFileDate: Date?
 
-    init(projectService: ProjectService, runtimeService: RuntimeService) {
+    init(projectService: ProjectService, runtimeService: RuntimeService, projectsFileURL: URL) {
         self.projectService = projectService
         self.runtimeService = runtimeService
+        self.projectsFileURL = projectsFileURL
     }
 
     func bootstrap() async {
         await runtimeService.startMonitoring()
         await runtimeService.reconcilePersistedStates()
         await reload()
+        startProjectFileWatch()
     }
 
     func reload() async {
@@ -124,5 +129,30 @@ final class AppViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private func startProjectFileWatch() {
+        projectFileWatchTask?.cancel()
+        projectFileWatchTask = Task {
+            lastProjectsFileDate = projectFileModifiedDate()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                let current = projectFileModifiedDate()
+                if current != lastProjectsFileDate {
+                    lastProjectsFileDate = current
+                    await reload()
+                }
+            }
+        }
+    }
+
+    private func projectFileModifiedDate() -> Date? {
+        guard
+            let values = try? projectsFileURL.resourceValues(forKeys: [.contentModificationDateKey]),
+            let date = values.contentModificationDate
+        else {
+            return nil
+        }
+        return date
     }
 }

@@ -19,13 +19,16 @@ echo "[1/5] Cleaning dist..."
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-echo "[2/5] Building ${APP_NAME} (release)..."
-swift build -c release
+echo "[2/5] Building ${APP_NAME} and CLIManagerCLI (release)..."
+swift build -c release --product "${APP_NAME}"
+swift build -c release --product CLIManagerCLI
 
 echo "[3/5] Preparing app bundle..."
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 cp ".build/release/${APP_NAME}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
+cp ".build/release/CLIManagerCLI" "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
 chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
+chmod +x "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
 
 echo "[4/5] Writing Info.plist..."
 cat > "${APP_DIR}/Contents/Info.plist" <<PLIST

@@ -41,13 +41,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-echo "[1/4] Building ${APP_NAME} (release)..."
-swift build -c release
+echo "[1/4] Building ${APP_NAME} and CLIManagerCLI (release)..."
+swift build -c release --product "${APP_NAME}"
+swift build -c release --product CLIManagerCLI
 
 echo "[2/4] Preparing app bundle..."
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
 cp ".build/release/${APP_NAME}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
+cp ".build/release/CLIManagerCLI" "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
 chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
+chmod +x "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
 
 echo "[3/4] Writing Info.plist..."
 cat > "${APP_DIR}/Contents/Info.plist" <<PLIST

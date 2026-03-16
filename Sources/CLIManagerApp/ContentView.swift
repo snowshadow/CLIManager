@@ -171,15 +171,29 @@ struct ContentView: View {
 
 private struct AutomationGuideView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var installStatus: String?
+    @State private var installError: String?
 
     private let appPaths = AppPaths()
 
     private var importCommand: String {
-        "CLIManagerCLI import --path /absolute/path/to/project"
+        "climanager import --path /absolute/path/to/project"
     }
 
     private var packageCommand: String {
         "swift run --package-path /path/to/CLIManager CLIManagerCLI import --path /absolute/path/to/project"
+    }
+
+    private var installCommand: String {
+        "swift run --package-path /path/to/CLIManager CLIManagerCLI install-cli"
+    }
+
+    private var shellInitSnippet: String {
+        CLIInstaller.shellInitSnippet()
+    }
+
+    private var installPath: String {
+        CLIInstaller.defaultInstallURL().path
     }
 
     var body: some View {
@@ -198,7 +212,7 @@ private struct AutomationGuideView: View {
 
             GroupBox("Official Import API") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("If CLIManagerCLI is already installed or built:")
+                    Text("If the `climanager` command is installed:")
                         .font(.subheadline.weight(.medium))
                     commandRow(importCommand)
 
@@ -210,8 +224,32 @@ private struct AutomationGuideView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            GroupBox("Install Command-Line Tool") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Install a user-level `climanager` command linked to the bundled CLI binary.")
+                        .foregroundStyle(.secondary)
+                    commandRow(installCommand)
+                    HStack {
+                        Button("Install `climanager`") {
+                            installBundledCLI()
+                        }
+                        Button("Copy PATH Snippet") {
+                            copyToPasteboard(shellInitSnippet)
+                        }
+                        Spacer()
+                    }
+                    if let installStatus {
+                        Text(installStatus)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             GroupBox("Data Location") {
                 VStack(alignment: .leading, spacing: 10) {
+                    pathRow(title: "Installed CLI Link", path: installPath)
                     pathRow(title: "CLIManager Data Root", path: appPaths.root.path)
                     pathRow(title: "Projects File", path: appPaths.projectsFile.path)
                 }
@@ -225,7 +263,16 @@ private struct AutomationGuideView: View {
             Spacer()
         }
         .padding(20)
-        .frame(width: 720, height: 420)
+        .frame(width: 720, height: 560)
+        .alert("Install Error", isPresented: Binding(get: {
+            installError != nil
+        }, set: { newValue in
+            if !newValue { installError = nil }
+        }), actions: {
+            Button("OK", role: .cancel) { installError = nil }
+        }, message: {
+            Text(installError ?? "Unknown error")
+        })
     }
 
     @ViewBuilder
@@ -264,7 +311,12 @@ private struct AutomationGuideView: View {
                     copyToPasteboard(path)
                 }
                 Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                    let url = URL(fileURLWithPath: path)
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } else {
+                        NSWorkspace.shared.open(url.deletingLastPathComponent())
+                    }
                 }
                 Spacer()
             }
@@ -275,5 +327,31 @@ private struct AutomationGuideView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(string, forType: .string)
+    }
+
+    private func installBundledCLI() {
+        do {
+            let target = try bundledCLIURL()
+            let result = try CLIInstaller().installCLI(linkURL: CLIInstaller.defaultInstallURL(), targetExecutableURL: target)
+            installStatus = "\(result.action.rawValue.capitalized): \(result.linkPath)"
+        } catch {
+            installError = error.localizedDescription
+        }
+    }
+
+    private func bundledCLIURL() throws -> URL {
+        let candidates: [URL?] = [
+            Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/CLIManagerCLI"),
+            Bundle.main.executableURL?.deletingLastPathComponent().appendingPathComponent("CLIManagerCLI"),
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".build/debug/CLIManagerCLI")
+        ]
+
+        if let found = candidates.compactMap({ $0 }).first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) {
+            return found
+        }
+
+        throw NSError(domain: "CLIManagerApp", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "Could not locate the bundled CLIManagerCLI executable."
+        ])
     }
 }

@@ -28,12 +28,19 @@ CLIManager also exposes a CLI entrypoint for automation:
 swift run CLIManagerCLI import --path /absolute/path/to/project
 ```
 
+To install the global `climanager` command from a source checkout:
+
+```bash
+swift run CLIManagerCLI install-cli
+```
+
 Optional flags:
 
 - `--name "Custom Name"`
 - `--command "npm run dev"`
 - `--root /custom/CLIManager-data-root`
 - `--dry-run`
+- `install-cli --target ~/bin/climanager`
 
 The command prints a JSON result with:
 
@@ -42,6 +49,17 @@ The command prints a JSON result with:
 - `projectsFile`: the `projects.json` path used
 
 Inside the app, use the `Automation` toolbar button to view the import command, copy it, and reveal the CLIManager data location in Finder.
+The same panel can install the bundled `climanager` command and the app will auto-refresh when external imports update `projects.json`.
+
+## Skill
+
+This repo also ships the `climanager-register-project` skill for agent ecosystems such as skills.sh.
+
+Install from GitHub with:
+
+```bash
+npx skills add https://github.com/snowshadow/CLIManager.git --skill climanager-register-project
+```
 
 ## Build & Run
 

@@ -9,6 +9,10 @@ struct CLIArguments {
     let dryRun: Bool
 }
 
+struct CLIInstallArguments {
+    let target: String?
+}
+
 enum CLIError: LocalizedError {
     case missingSubcommand
     case unsupportedSubcommand(String)
@@ -36,9 +40,11 @@ func usage() -> String {
     """
     Usage:
       CLIManagerCLI import --path /absolute/project/path [--name "Project"] [--command "swift run"] [--root /custom/root] [--dry-run]
+      CLIManagerCLI install-cli [--target ~/bin/climanager]
 
     Subcommands:
-      import    Register a local CLI project in CLIManager
+      import       Register a local CLI project in CLIManager
+      install-cli  Install the `climanager` shell command as a symlink
     """
 }
 
@@ -84,6 +90,29 @@ func parseImportArguments(_ args: ArraySlice<String>) throws -> CLIArguments {
     return CLIArguments(path: path, name: name, command: command, root: root, dryRun: dryRun)
 }
 
+func parseInstallArguments(_ args: ArraySlice<String>) throws -> CLIInstallArguments {
+    var target: String?
+
+    var index = args.startIndex
+    while index < args.endIndex {
+        let arg = args[index]
+        switch arg {
+        case "--target":
+            index = args.index(after: index)
+            guard index < args.endIndex else { throw CLIError.missingValue("--target") }
+            target = args[index]
+        case "--help", "-h":
+            print(usage())
+            exit(0)
+        default:
+            throw CLIError.unsupportedArgument(arg)
+        }
+        index = args.index(after: index)
+    }
+
+    return CLIInstallArguments(target: target)
+}
+
 func expandPath(_ path: String) -> String {
     NSString(string: path).expandingTildeInPath
 }
@@ -100,6 +129,15 @@ func buildPaths(root: String?) -> AppPaths {
 }
 
 func encodeResult(_ result: ProjectImportResult) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let data = try encoder.encode(result)
+    if let output = String(data: data, encoding: .utf8) {
+        print(output)
+    }
+}
+
+func encodeInstallResult(_ result: CLIInstallResult) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     let data = try encoder.encode(result)
@@ -146,6 +184,13 @@ func importProject(args: CLIArguments) throws {
     try encodeResult(ProjectImportResult(action: .created, project: created, projectsFile: paths.projectsFile.path))
 }
 
+func installCLI(args: CLIInstallArguments) throws {
+    let executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+    let targetURL = args.target.map { URL(fileURLWithPath: expandPath($0)) } ?? CLIInstaller.defaultInstallURL()
+    let result = try CLIInstaller().installCLI(linkURL: targetURL, targetExecutableURL: executableURL)
+    try encodeInstallResult(result)
+}
+
 func main() throws {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let subcommand = args.first else {
@@ -155,6 +200,8 @@ func main() throws {
     switch subcommand {
     case "import":
         try importProject(args: try parseImportArguments(args.dropFirst()))
+    case "install-cli":
+        try installCLI(args: try parseInstallArguments(args.dropFirst()))
     case "--help", "-h":
         print(usage())
     default:

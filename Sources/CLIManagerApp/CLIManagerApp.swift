@@ -16,7 +16,7 @@ struct CLIManagerApp: App {
         let logService = LogService(logsDirectory: paths.logsDirectory)
         let runtime = RuntimeService(stateStore: stateStore, logService: logService)
         let projectService = ProjectService(repository: repo)
-        _model = StateObject(wrappedValue: AppViewModel(projectService: projectService, runtimeService: runtime))
+        _model = StateObject(wrappedValue: AppViewModel(projectService: projectService, runtimeService: runtime, projectsFileURL: paths.projectsFile))
     }
 
     var body: some Scene {
