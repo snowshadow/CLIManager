@@ -173,6 +173,7 @@ private struct AutomationGuideView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var installStatus: String?
     @State private var installError: String?
+    @State private var isInstalling = false
 
     private let appPaths = AppPaths()
 
@@ -210,60 +211,65 @@ private struct AutomationGuideView: View {
                     .keyboardShortcut(.cancelAction)
             }
 
-            GroupBox("Official Import API") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("If the `climanager` command is installed:")
-                        .font(.subheadline.weight(.medium))
-                    commandRow(importCommand)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    GroupBox("Official Import API") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("If the `climanager` command is installed:")
+                                .font(.subheadline.weight(.medium))
+                            commandRow(importCommand)
 
-                    Text("If you are calling from the source checkout:")
-                        .font(.subheadline.weight(.medium))
-                        .padding(.top, 4)
-                    commandRow(packageCommand)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+                            Text("If you are calling from the source checkout:")
+                                .font(.subheadline.weight(.medium))
+                                .padding(.top, 4)
+                            commandRow(packageCommand)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
-            GroupBox("Install Command-Line Tool") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Install a user-level `climanager` command linked to the bundled CLI binary.")
+                    GroupBox("Install Command-Line Tool") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Install a user-level `climanager` command linked to the bundled CLI binary.")
+                                .foregroundStyle(.secondary)
+                            commandRow(installCommand)
+                            HStack {
+                                Button(isInstalling ? "Installing..." : "Install `climanager`") {
+                                    installBundledCLI()
+                                }
+                                .disabled(isInstalling)
+                                Button("Copy PATH Snippet") {
+                                    copyToPasteboard(shellInitSnippet)
+                                }
+                                Spacer()
+                            }
+                            if let installStatus {
+                                Text(installStatus)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    GroupBox("Data Location") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            pathRow(title: "Installed CLI Link", path: installPath)
+                            pathRow(title: "CLIManager Data Root", path: appPaths.root.path)
+                            pathRow(title: "Projects File", path: appPaths.projectsFile.path)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Text("Imported projects appear automatically after external commands update projects.json.")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                    commandRow(installCommand)
-                    HStack {
-                        Button("Install `climanager`") {
-                            installBundledCLI()
-                        }
-                        Button("Copy PATH Snippet") {
-                            copyToPasteboard(shellInitSnippet)
-                        }
-                        Spacer()
-                    }
-                    if let installStatus {
-                        Text(installStatus)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 4)
             }
-
-            GroupBox("Data Location") {
-                VStack(alignment: .leading, spacing: 10) {
-                    pathRow(title: "Installed CLI Link", path: installPath)
-                    pathRow(title: "CLIManager Data Root", path: appPaths.root.path)
-                    pathRow(title: "Projects File", path: appPaths.projectsFile.path)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text("Imported projects appear after a refresh if the app is already open.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Spacer()
         }
         .padding(20)
-        .frame(width: 720, height: 560)
+        .frame(minWidth: 720, idealWidth: 760, maxWidth: 860, minHeight: 560, idealHeight: 640, maxHeight: 760)
         .alert("Install Error", isPresented: Binding(get: {
             installError != nil
         }, set: { newValue in
@@ -330,12 +336,26 @@ private struct AutomationGuideView: View {
     }
 
     private func installBundledCLI() {
-        do {
-            let target = try bundledCLIURL()
-            let result = try CLIInstaller().installCLI(linkURL: CLIInstaller.defaultInstallURL(), targetExecutableURL: target)
-            installStatus = "\(result.action.rawValue.capitalized): \(result.linkPath)"
-        } catch {
-            installError = error.localizedDescription
+        guard !isInstalling else { return }
+        isInstalling = true
+        installStatus = nil
+
+        Task {
+            do {
+                let target = try bundledCLIURL()
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try CLIInstaller().installCLI(linkURL: CLIInstaller.defaultInstallURL(), targetExecutableURL: target)
+                }.value
+                await MainActor.run {
+                    installStatus = "\(result.action.rawValue.capitalized): \(result.linkPath)"
+                    isInstalling = false
+                }
+            } catch {
+                await MainActor.run {
+                    installError = error.localizedDescription
+                    isInstalling = false
+                }
+            }
         }
     }
 
