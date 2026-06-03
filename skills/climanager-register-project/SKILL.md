@@ -12,7 +12,7 @@ Use this skill when the user wants an AI agent to add a local CLI app into CLIMa
 - Validates that the target path exists and is a directory
 - Determines a project name and start command
 - Calls CLIManager's official CLI import interface
-- Avoids duplicates by `path + startCommand`
+- Data is always written to the central `~/Library/Application Support/CLIManager/projects.json`
 
 ## Inputs to gather
 
@@ -20,7 +20,7 @@ Collect or infer these values:
 
 - `path`: absolute path to the CLI project directory
 - `name`: optional; default to the directory name when not provided
-- `command`: optional only if it can be inferred confidently
+- `command`: optional; only if it cannot be inferred confidently
 
 If the start command is ambiguous, stop and ask the user instead of guessing.
 
@@ -30,20 +30,21 @@ Prefer deterministic signals in this order:
 
 1. Existing repo docs or user instruction that explicitly name the command
 2. `package.json`
-   - `scripts.dev` -> `npm run dev`
-   - `scripts.start` -> `npm start`
+   - If `pnpm-lock.yaml` exists, use `pnpm` prefix, otherwise `npm run`
+   - `scripts.dev` → preferred (`pnpm dev` / `npm run dev`)
+   - `scripts.start` → fallback when `dev` is absent (`pnpm start` / `npm start`)
 3. `Makefile`
-   - target `dev` -> `make dev`
-   - target `run` -> `make run`
-4. `Cargo.toml` -> `cargo run`
-5. `Package.swift` -> `swift run`
-6. `go.mod` -> `go run .`
+   - target `dev` → `make dev`
+   - target `run` → `make run`
+4. `Cargo.toml` → `cargo run`
+5. `Package.swift` → `swift run`
+6. `go.mod` → `go run .`
 7. `deno.json` or `deno.jsonc`
-   - task `dev` -> `deno task dev`
-   - task `start` -> `deno task start`
-8. `main.py` -> `python main.py`
+   - task `dev` → `deno task dev`
+   - task `start` → `deno task start`
+8. `main.py` → `python main.py`
 
-If multiple plausible commands exist and no explicit preference is present, ask the user.
+Only ask the user to choose when no single rule can pick a command (e.g., a Makefile with both `dev` and `run` targets).
 
 ## Registration workflow
 
@@ -64,9 +65,9 @@ The bundled script:
 - Invokes `CLIManagerCLI import`
 - Uses `swift run --package-path ... CLIManagerCLI -- import ...`
 - Supports `CLIMANAGER_PACKAGE_PATH` when the CLIManager repo is not adjacent to the skill
+- Use `--dry-run` when you only need to preview the inferred registration payload
 
 ## Notes
 
-- CLIManager currently treats `path + startCommand` as the uniqueness key.
-- The script accepts `--root` to target a different CLIManager data directory for testing.
-- Use `--dry-run` when you only need to preview the inferred registration payload.
+- CLIManager treats `path + startCommand` as the uniqueness key.
+- The CLI writes to `~/Library/Application Support/CLIManager/projects.json` by default.

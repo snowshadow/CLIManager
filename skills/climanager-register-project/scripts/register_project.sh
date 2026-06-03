@@ -25,7 +25,7 @@ resolve_package_path() {
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'EOF'
 Usage:
-  register_project.sh --path /absolute/project/path [--name "Project"] [--command "swift run"] [--root /custom/root] [--dry-run]
+  register_project.sh --path /absolute/project/path [--name "Project"] [--command "swift run"] [--dry-run]
 
 Environment:
   CLIMANAGER_PACKAGE_PATH   Absolute path to the CLIManager package root
