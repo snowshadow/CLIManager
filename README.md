@@ -38,7 +38,6 @@ Optional flags:
 
 - `--name "Custom Name"`
 - `--command "npm run dev"`
-- `--root /custom/CLIManager-data-root`
 - `--dry-run`
 - `install-cli --target ~/bin/climanager`
 
