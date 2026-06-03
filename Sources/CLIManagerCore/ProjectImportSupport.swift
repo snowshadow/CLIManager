@@ -99,9 +99,12 @@ public struct ProjectCommandInferrer {
             return []
         }
 
+        let isPnpm = fileManager.fileExists(atPath: directory.appendingPathComponent("pnpm-lock.yaml").path)
+        let prefix = isPnpm ? "pnpm" : "npm run"
+
         var candidates: [String] = []
-        if scripts["dev"] != nil { candidates.append("npm run dev") }
-        if scripts["start"] != nil { candidates.append("npm start") }
+        if scripts["dev"] != nil { candidates.append("\(prefix) dev") }
+        if scripts["start"] != nil && scripts["dev"] == nil { candidates.append(isPnpm ? "pnpm start" : "npm start") }
         return candidates
     }
 

@@ -5,7 +5,6 @@ struct CLIArguments {
     let path: String
     let name: String?
     let command: String?
-    let root: String?
     let dryRun: Bool
 }
 
@@ -39,7 +38,7 @@ enum CLIError: LocalizedError {
 func usage() -> String {
     """
     Usage:
-      CLIManagerCLI import --path /absolute/project/path [--name "Project"] [--command "swift run"] [--root /custom/root] [--dry-run]
+      CLIManagerCLI import --path /absolute/project/path [--name "Project"] [--command "swift run"] [--dry-run]
       CLIManagerCLI install-cli [--target ~/bin/climanager]
 
     Subcommands:
@@ -52,7 +51,6 @@ func parseImportArguments(_ args: ArraySlice<String>) throws -> CLIArguments {
     var path: String?
     var name: String?
     var command: String?
-    var root: String?
     var dryRun = false
 
     var index = args.startIndex
@@ -71,10 +69,6 @@ func parseImportArguments(_ args: ArraySlice<String>) throws -> CLIArguments {
             index = args.index(after: index)
             guard index < args.endIndex else { throw CLIError.missingValue("--command") }
             command = args[index]
-        case "--root":
-            index = args.index(after: index)
-            guard index < args.endIndex else { throw CLIError.missingValue("--root") }
-            root = args[index]
         case "--dry-run":
             dryRun = true
         case "--help", "-h":
@@ -87,7 +81,7 @@ func parseImportArguments(_ args: ArraySlice<String>) throws -> CLIArguments {
     }
 
     guard let path else { throw CLIError.missingPath }
-    return CLIArguments(path: path, name: name, command: command, root: root, dryRun: dryRun)
+    return CLIArguments(path: path, name: name, command: command, dryRun: dryRun)
 }
 
 func parseInstallArguments(_ args: ArraySlice<String>) throws -> CLIInstallArguments {
@@ -119,13 +113,6 @@ func expandPath(_ path: String) -> String {
 
 func normalizedDirectoryURL(_ path: String) -> URL {
     URL(fileURLWithPath: expandPath(path), isDirectory: true).standardizedFileURL
-}
-
-func buildPaths(root: String?) -> AppPaths {
-    if let root {
-        return AppPaths(root: URL(fileURLWithPath: expandPath(root), isDirectory: true).standardizedFileURL)
-    }
-    return AppPaths()
 }
 
 func encodeResult(_ result: ProjectImportResult) throws {
@@ -160,7 +147,7 @@ func importProject(args: CLIArguments) throws {
         return try ProjectCommandInferrer().inferStartCommand(projectDirectory: projectURL)
     }()
 
-    let paths = buildPaths(root: args.root)
+    let paths = AppPaths()
     let repository = JSONProjectRepository(fileURL: paths.projectsFile)
     let validator = ProjectValidator()
     let existing = try repository.loadProjects()

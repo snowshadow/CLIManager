@@ -14,8 +14,8 @@ struct ProjectImportSupportTests {
         #expect(command == "swift run")
     }
 
-    @Test("Returns ambiguity when package.json exposes dev and start")
-    func reportsAmbiguousNpmScripts() throws {
+    @Test("Prefers dev script when package.json has both dev and start")
+    func prefersDevOverStart() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let packageJSON = """
@@ -28,10 +28,43 @@ struct ProjectImportSupportTests {
         """
         try packageJSON.write(to: dir.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
 
-        let error = #expect(throws: ProjectImportError.self) {
-            _ = try ProjectCommandInferrer().inferStartCommand(projectDirectory: dir)
+        let command = try ProjectCommandInferrer().inferStartCommand(projectDirectory: dir)
+        #expect(command == "npm run dev")
+    }
+
+    @Test("Falls back to start when dev is absent")
+    func fallsBackToStart() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let packageJSON = """
+        {
+          "scripts": {
+            "start": "node index.js"
+          }
         }
-        #expect(error == .ambiguousStartCommand(["npm run dev", "npm start"]))
+        """
+        try packageJSON.write(to: dir.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+
+        let command = try ProjectCommandInferrer().inferStartCommand(projectDirectory: dir)
+        #expect(command == "npm start")
+    }
+
+    @Test("Uses pnpm when pnpm-lock.yaml exists")
+    func usesPnpmPrefix() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let packageJSON = """
+        {
+          "scripts": {
+            "dev": "vite"
+          }
+        }
+        """
+        try packageJSON.write(to: dir.appendingPathComponent("package.json"), atomically: true, encoding: .utf8)
+        try "".write(to: dir.appendingPathComponent("pnpm-lock.yaml"), atomically: true, encoding: .utf8)
+
+        let command = try ProjectCommandInferrer().inferStartCommand(projectDirectory: dir)
+        #expect(command == "pnpm dev")
     }
 
     @Test("Validator rejects invalid directory and duplicate path plus command")
