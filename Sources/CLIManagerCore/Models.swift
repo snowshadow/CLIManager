@@ -39,6 +39,8 @@ public struct RuntimeState: Codable, Equatable, Sendable {
     public var startedAt: Date?
     public var exitCode: Int32?
     public var lastError: String?
+    public var startedExternally: Bool
+    public var ownedByCLIManager: Bool
 
     public init(
         projectId: UUID,
@@ -46,7 +48,9 @@ public struct RuntimeState: Codable, Equatable, Sendable {
         pid: Int32? = nil,
         startedAt: Date? = nil,
         exitCode: Int32? = nil,
-        lastError: String? = nil
+        lastError: String? = nil,
+        startedExternally: Bool = false,
+        ownedByCLIManager: Bool = false
     ) {
         self.projectId = projectId
         self.status = status
@@ -54,5 +58,7 @@ public struct RuntimeState: Codable, Equatable, Sendable {
         self.startedAt = startedAt
         self.exitCode = exitCode
         self.lastError = lastError
+        self.startedExternally = startedExternally
+        self.ownedByCLIManager = ownedByCLIManager
     }
 }

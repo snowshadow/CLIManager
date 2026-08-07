@@ -1,12 +1,13 @@
 import Foundation
 import Darwin
 
-public protocol RuntimeManaging {
+@preconcurrency public protocol RuntimeManaging {
     func start(project: Project) async throws
     func stop(projectId: UUID) async throws
     func state(projectId: UUID) async -> RuntimeState
     func snapshotStates() async -> [UUID: RuntimeState]
     func subscribeLogs(projectId: UUID) async -> AsyncStream<String>
+    func detectExternalProcesses(projects: [Project]) async -> Bool
 }
 
 public enum RuntimeError: LocalizedError {
@@ -42,6 +43,11 @@ public actor RuntimeService: RuntimeManaging {
     private var expectedStops: Set<UUID> = []
     private var pollTask: Task<Void, Never>?
     private var pollingStarted = false
+
+    // External process detection backoff
+    private var externalScanInterval: TimeInterval = 8
+    private var lastExternalScanTime: Date = .distantPast
+    private var consecutiveNoFindings: Int = 0
 
     public init(stateStore: RuntimeStateStore, logService: LogService) {
         self.stateStore = stateStore
@@ -99,7 +105,7 @@ public actor RuntimeService: RuntimeManaging {
         }
 
         processes[project.id] = ManagedProcess(process: process, stdout: stdout, stderr: stderr)
-        try await setState(RuntimeState(projectId: project.id, status: .running, pid: process.processIdentifier, startedAt: Date(), exitCode: nil, lastError: nil))
+        try await setState(RuntimeState(projectId: project.id, status: .running, pid: process.processIdentifier, startedAt: Date(), exitCode: nil, lastError: nil, ownedByCLIManager: true))
     }
 
     public func stop(projectId: UUID) async throws {
@@ -133,6 +139,95 @@ public actor RuntimeService: RuntimeManaging {
         }
     }
 
+    public func resetExternalScanInterval() {
+        externalScanInterval = 8
+        lastExternalScanTime = .distantPast
+        consecutiveNoFindings = 0
+    }
+
+    public func detectExternalProcesses(projects: [Project]) async -> Bool {
+        return await scanForExternalProcesses(projects: projects)
+    }
+
+    private func scanForExternalProcesses(projects: [Project]) async -> Bool {
+        var found = false
+
+        for project in projects {
+            let current = states[project.id] ?? RuntimeState(projectId: project.id)
+            guard current.status == .stopped else { continue }
+
+            guard let pid = findExternalPID(for: project) else { continue }
+
+            // Verify the PID actually belongs to a running process
+            guard kill(pid, 0) == 0 else { continue }
+
+            states[project.id] = RuntimeState(
+                projectId: project.id,
+                status: .running,
+                pid: pid,
+                startedAt: Date(),
+                startedExternally: true
+            )
+            found = true
+        }
+
+        if found {
+            try? stateStore.saveStates(states)
+        }
+        return found
+    }
+
+    private func findExternalPID(for project: Project) -> Int32? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-eo", "pid=,args="]
+
+        let output = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = output
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+
+        // Read data before waiting to avoid pipe-buffer deadlock
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard let raw = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let projectPath = project.path
+        var candidatePID: Int32?
+
+        for line in raw.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard let firstSpace = trimmed.firstIndex(of: " ") else { continue }
+            let pidStr = String(trimmed[..<firstSpace])
+            guard let pid = Int32(pidStr), pid > 1 else { continue }
+
+            let fullArgs = String(trimmed[trimmed.index(after: firstSpace)...])
+
+            guard pid != ProcessInfo.processInfo.processIdentifier else { continue }
+
+            if fullArgs.contains(projectPath) {
+                if candidatePID == nil || pid < candidatePID! {
+                    candidatePID = pid
+                }
+            }
+        }
+
+        if let pid = candidatePID {
+            if kill(pid, 0) == 0 {
+                return pid
+            }
+        }
+        return nil
+    }
+
     public func subscribeLogs(projectId: UUID) async -> AsyncStream<String> {
         let buffer = await logs.recent(projectId: projectId)
 
@@ -159,11 +254,43 @@ public actor RuntimeService: RuntimeManaging {
         try? stateStore.saveStates(states)
     }
 
+    /// Restore logs from disk into the ring buffer so log view has history after restart.
+    public func restoreLogsFromDisk(for projectIds: [UUID]) async {
+        await logs.loadFromDisk(projectIds: projectIds)
+    }
+
     private func pollLoop() async {
         while !Task.isCancelled {
             do {
                 try await Task.sleep(nanoseconds: 2_000_000_000)
+
+                // Layer 1: always check running/starting processes (lightweight)
                 await refreshRunningStates()
+
+                // Layer 2: external process detection with exponential backoff
+                // Read projects from disk so the auto-scan always has fresh project list
+                if let stateStoreURL = (stateStore as? JSONRuntimeStateStore)?.fileURL {
+                    let projectsURL = stateStoreURL.deletingLastPathComponent().appendingPathComponent("projects.json")
+                    var projects: [Project] = []
+                    if let data = try? Data(contentsOf: projectsURL),
+                       let decoded = try? JSONDecoder().decode([Project].self, from: data) {
+                        projects = decoded
+                    }
+                    if !projects.isEmpty {
+                        let now = Date()
+                        if now.timeIntervalSince(lastExternalScanTime) >= externalScanInterval {
+                            lastExternalScanTime = now
+                            let found = await scanForExternalProcesses(projects: projects)
+                            if found {
+                                externalScanInterval = 8
+                                consecutiveNoFindings = 0
+                            } else {
+                                consecutiveNoFindings += 1
+                                externalScanInterval = min(8 * pow(2.0, Double(consecutiveNoFindings)), 120)
+                            }
+                        }
+                    }
+                }
             } catch {
                 return
             }
@@ -171,12 +298,18 @@ public actor RuntimeService: RuntimeManaging {
     }
 
     private func refreshRunningStates() async {
+        var changed = false
         for (projectId, state) in states where state.status == .running || state.status == .starting {
             guard let pid = state.pid else { continue }
             if kill(pid, 0) != 0 {
                 states[projectId] = RuntimeState(projectId: projectId, status: .stopped, pid: nil, startedAt: state.startedAt, exitCode: state.exitCode, lastError: state.lastError)
                 cleanupProject(projectId)
+                changed = true
             }
+        }
+        if changed {
+            // A known process died — reset backoff in case it gets restarted externally
+            resetExternalScanInterval()
         }
         try? stateStore.saveStates(states)
     }
@@ -189,6 +322,8 @@ public actor RuntimeService: RuntimeManaging {
         states[projectId] = RuntimeState(projectId: projectId, status: status, pid: nil, startedAt: prior.startedAt, exitCode: exitCode, lastError: errorMessage)
         try? stateStore.saveStates(states)
         cleanupProject(projectId)
+        // Reset backoff — process may be restarted externally
+        resetExternalScanInterval()
     }
 
     private func cleanupProject(_ projectId: UUID) {
@@ -268,6 +403,21 @@ public actor LogService {
 
     public func recent(projectId: UUID) -> [String] {
         ring[projectId] ?? []
+    }
+
+    /// Restore the ring buffer from the on-disk log file after an app restart.
+    public func loadFromDisk(projectIds: [UUID]) async {
+        for projectId in projectIds {
+            guard ring[projectId] == nil else { continue }
+            let file = logsDirectory.appendingPathComponent("\(projectId.uuidString).log")
+            guard fileManager.fileExists(atPath: file.path),
+                  let raw = try? String(contentsOf: file, encoding: .utf8) else { continue }
+
+            let lines = raw.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                .filter { !$0.isEmpty }
+            let tail = lines.suffix(maxBufferedLines)
+            ring[projectId] = Array(tail)
+        }
     }
 }
 

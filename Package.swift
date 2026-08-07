@@ -11,13 +11,19 @@ let package = Package(
         .executable(name: "CLIManagerApp", targets: ["CLIManagerApp"]),
         .executable(name: "CLIManagerCLI", targets: ["CLIManagerCLI"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .target(
             name: "CLIManagerCore"
         ),
         .executableTarget(
             name: "CLIManagerApp",
-            dependencies: ["CLIManagerCore"]
+            dependencies: [
+                "CLIManagerCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]
         ),
         .executableTarget(
             name: "CLIManagerCLI",

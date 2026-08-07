@@ -29,7 +29,7 @@ struct ContentView: View {
                         Text(project.path).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    statusBadge(for: model.states[project.id]?.status ?? .stopped)
+                    statusBadge(for: model.states[project.id] ?? RuntimeState(projectId: project.id))
                 }
                 .tag(project.id)
                 .contextMenu {
@@ -50,10 +50,11 @@ struct ContentView: View {
                 }
                 ToolbarItem {
                     Button {
-                        Task { await model.reload() }
+                        Task { await model.forceExternalScan() }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
+                    .help("Refresh project list and scan for externally running processes")
                 }
                 ToolbarItem {
                     Button {
@@ -117,16 +118,38 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func statusBadge(for status: RuntimeStatus) -> some View {
-        switch status {
+    private func statusBadge(for state: RuntimeState) -> some View {
+        let label: String = {
+            if state.startedExternally {
+                return state.ownedByCLIManager ? "running" : "running (external)"
+            }
+            switch state.status {
+            case .running: return "running"
+            case .starting: return "starting"
+            case .failed: return "failed"
+            case .stopped: return "stopped"
+            }
+        }()
+        HStack(spacing: 4) {
+            if state.startedExternally && !state.ownedByCLIManager {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 9))
+            }
+            Text(label).font(.caption)
+        }
+        .padding(4)
+        .background(background(for: state))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func background(for state: RuntimeState) -> Color {
+        switch state.status {
         case .running:
-            Text("running").font(.caption).padding(4).background(.green.opacity(0.2)).clipShape(RoundedRectangle(cornerRadius: 4))
-        case .starting:
-            Text("starting").font(.caption).padding(4).background(.yellow.opacity(0.3)).clipShape(RoundedRectangle(cornerRadius: 4))
-        case .failed:
-            Text("failed").font(.caption).padding(4).background(.red.opacity(0.2)).clipShape(RoundedRectangle(cornerRadius: 4))
-        case .stopped:
-            Text("stopped").font(.caption).padding(4).background(.gray.opacity(0.2)).clipShape(RoundedRectangle(cornerRadius: 4))
+            if state.startedExternally && !state.ownedByCLIManager { return .blue.opacity(0.2) }
+            return .green.opacity(0.2)
+        case .starting: return .yellow.opacity(0.3)
+        case .failed: return .red.opacity(0.2)
+        case .stopped: return .gray.opacity(0.2)
         }
     }
 
@@ -139,6 +162,16 @@ struct ContentView: View {
                     Text(project.name).font(.title2.bold())
                     Text(project.path).font(.subheadline).foregroundStyle(.secondary)
                     Text(project.startCommand).font(.caption).foregroundStyle(.secondary)
+                    if state.startedExternally && !state.ownedByCLIManager {
+                        HStack(spacing: 4) {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                .font(.system(size: 10))
+                            Text("Process started externally — logs from this session are unavailable.")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.blue)
+                        .padding(.top, 2)
+                    }
                 }
                 Spacer()
                 if state.status == .running || state.status == .starting {
@@ -158,6 +191,7 @@ struct ContentView: View {
                         ForEach(Array(model.selectedLogs.enumerated()), id: \.offset) { _, line in
                             Text(line)
                                 .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }

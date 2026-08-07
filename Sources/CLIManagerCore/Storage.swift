@@ -80,7 +80,7 @@ public final class JSONProjectRepository: ProjectRepository {
 }
 
 public final class JSONRuntimeStateStore: RuntimeStateStore {
-    private let fileURL: URL
+    public let fileURL: URL
     private let fileManager: FileManager
 
     public init(fileURL: URL, fileManager: FileManager = .default) {

@@ -26,6 +26,10 @@ final class AppViewModel: ObservableObject {
     func bootstrap() async {
         await runtimeService.startMonitoring()
         await runtimeService.reconcilePersistedStates()
+        // Restore historical logs from disk for any project CLIManager previously started
+        let states = await runtimeService.snapshotStates()
+        let ownedIds = states.compactMap { $0.value.ownedByCLIManager ? $0.key : nil }
+        await runtimeService.restoreLogsFromDisk(for: ownedIds)
         await reload()
         startProjectFileWatch()
     }
@@ -44,6 +48,11 @@ final class AppViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func forceExternalScan() async {
+        _ = await runtimeService.detectExternalProcesses(projects: projects)
+        await reloadStates()
     }
 
     func createProject(name: String, path: String, command: String) async {
@@ -84,6 +93,11 @@ final class AppViewModel: ObservableObject {
         do {
             try await runtimeService.start(project: project)
             await reloadStates()
+        } catch RuntimeError.alreadyRunning {
+            // Process may have been started externally — scan and sync
+            _ = await runtimeService.detectExternalProcesses(projects: projects)
+            await reloadStates()
+            errorMessage = "Project appears to be running externally. Status synced."
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -4,6 +4,7 @@ set -euo pipefail
 APP_NAME="CLIManagerApp"
 BUNDLE_ID="local.alfred.CLIManagerApp"
 MIN_MACOS="13.0"
+VERSION="${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '1.0.0')}"
 INSTALL_DIR="${HOME}/Applications"
 APP_DIR="${INSTALL_DIR}/${APP_NAME}.app"
 ICON_SOURCE="assets/AppIcon.icns"
@@ -46,11 +47,15 @@ swift build -c release --product "${APP_NAME}"
 swift build -c release --product CLIManagerCLI
 
 echo "[2/4] Preparing app bundle..."
-mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
+mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources" "${APP_DIR}/Contents/Frameworks"
 cp ".build/release/${APP_NAME}" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 cp ".build/release/CLIManagerCLI" "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
+cp -R ".build/release/Sparkle.framework" "${APP_DIR}/Contents/Frameworks/Sparkle.framework"
 chmod +x "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 chmod +x "${APP_DIR}/Contents/MacOS/CLIManagerCLI"
+
+# Ensure Sparkle.framework can be found at runtime
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${APP_DIR}/Contents/MacOS/${APP_NAME}"
 
 echo "[3/4] Writing Info.plist..."
 cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
@@ -61,11 +66,13 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>${APP_NAME}</string>
   <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
   <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>${APP_NAME}</string>
   <key>LSMinimumSystemVersion</key><string>${MIN_MACOS}</string>
+  <key>SUEnableInstallerLauncherService</key><true/>
+  <key>SUFeedURL</key><string>https://github.com/alfredxia/CLIManager/releases/latest/download/appcast.xml</string>
 </dict>
 </plist>
 PLIST
