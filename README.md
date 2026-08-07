@@ -60,6 +60,17 @@ Install from GitHub with:
 npx skills add https://github.com/snowshadow/CLIManager.git --skill climanager-register-project
 ```
 
+## Releasing
+
+```bash
+scripts/release.sh            # patch bump  (v2.0.3 → v2.0.4)
+scripts/release.sh minor      # minor bump  (v2.0.3 → v2.1.0)
+scripts/release.sh major      # major bump  (v2.0.3 → v3.0.0)
+scripts/release.sh 2.5.0      # exact version
+```
+
+The script builds and tests, commits any staged changes, tags the release, and pushes — then CI builds the DMG and publishes the GitHub Release.
+
 ## Build & Run
 
 Requirements:
