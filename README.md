@@ -8,7 +8,9 @@ CLIManager is a lightweight macOS app to organize and run commands across many l
 
 - Track multiple projects with name, path, and start command
 - Start/stop processes and see their running status
-- View recent logs in-app
+- Auto-detect processes started outside the app and keep their status in sync
+- View logs in-app with selectable text; processes started by CLIManager keep their status and logs across app restarts
+- Check for app updates from the menu (powered by Sparkle)
 - Stores data locally in Application Support
 
 ## Usage
