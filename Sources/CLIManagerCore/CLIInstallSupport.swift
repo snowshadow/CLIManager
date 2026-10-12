@@ -28,12 +28,13 @@ public final class CLIInstaller {
     }
 
     public static func defaultInstallURL(fileManager: FileManager = .default) -> URL {
-        let home = fileManager.homeDirectoryForCurrentUser
-        return home.appendingPathComponent("bin", isDirectory: true).appendingPathComponent("climanager")
+        // Standard Homebrew prefix on Apple Silicon Macs; writable by admin users without sudo.
+        URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true).appendingPathComponent("climanager")
     }
 
     public static func shellInitSnippet() -> String {
-        #"export PATH="$HOME/bin:$PATH""#
+        // Ensures /opt/homebrew/bin is on PATH (standard Homebrew shell setup).
+        #"eval "$(/opt/homebrew/bin/brew shellenv)""#
     }
 
     public func installCLI(linkURL: URL, targetExecutableURL: URL) throws -> CLIInstallResult {
@@ -42,8 +43,11 @@ public final class CLIInstaller {
 
         try fileManager.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-        if fileManager.fileExists(atPath: link.path) {
-            if let existing = try? fileManager.destinationOfSymbolicLink(atPath: link.path) {
+        // `fileExists(atPath:)` follows symlinks, so a dangling symlink would slip past
+        // this check and make `createSymbolicLink` fail. Detect the link itself too.
+        let existingLink = try? fileManager.destinationOfSymbolicLink(atPath: link.path)
+        if existingLink != nil || fileManager.fileExists(atPath: link.path) {
+            if let existing = existingLink {
                 let resolvedExisting = URL(fileURLWithPath: existing, relativeTo: link.deletingLastPathComponent())
                     .standardizedFileURL
                 if resolvedExisting.path == target.path {

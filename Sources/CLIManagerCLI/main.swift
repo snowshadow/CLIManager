@@ -39,7 +39,7 @@ func usage() -> String {
     """
     Usage:
       CLIManagerCLI import --path /absolute/project/path [--name "Project"] [--command "swift run"] [--dry-run]
-      CLIManagerCLI install-cli [--target ~/bin/climanager]
+      CLIManagerCLI install-cli [--target /opt/homebrew/bin/climanager]
 
     Subcommands:
       import       Register a local CLI project in CLIManager

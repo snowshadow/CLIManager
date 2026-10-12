@@ -35,4 +35,23 @@ struct CLIInstallSupportTests {
         let result = try CLIInstaller().installCLI(linkURL: link, targetExecutableURL: target)
         #expect(result.action == .unchanged)
     }
+
+    @Test("Replaces a dangling symlink whose target is gone")
+    func replacesDanglingSymlink() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let target = dir.appendingPathComponent("CLIManagerCLI")
+        try "#!/bin/sh\n".write(to: target, atomically: true, encoding: .utf8)
+
+        let link = dir.appendingPathComponent("bin/climanager")
+        try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Point at a target that does not exist, so fileExists(atPath:) returns false.
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: dir.appendingPathComponent("deleted/CLIManagerCLI"))
+
+        let result = try CLIInstaller().installCLI(linkURL: link, targetExecutableURL: target)
+        #expect(result.action == .updated)
+        let destination = try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+        #expect(destination == target.path)
+    }
 }
